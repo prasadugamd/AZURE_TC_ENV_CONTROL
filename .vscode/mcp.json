@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "env-control-mcp": {
+      "type": "stdio",
+      "command": "C:/Users/prasadug/.local/bin/python3.14.exe",
+      "args": [
+        "mcp/env_control_server/server.py"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

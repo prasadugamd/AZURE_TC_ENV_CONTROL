@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# MCP runtime data (schedule state — keep local, not shared)
+mcp/env_control_server/data/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code local settings (keep mcp.json since it wires the server)
+.vscode/settings.json
+.vscode/launch.json
+
+# kubectl cache and kubeconfig — may contain cluster tokens/certs
+int-01/Auth/.kube/
+
+# Generated / runtime files — not source
+int-01/EnvControl.log
+int-01/EnvControl_Report.html
+int-01/Azure_TC_INT_EnvControl_Runbook_SOP.docx
+int-01/INT-01_EnvControl_Runbook.docx
+
+# Sensitive — never commit real credentials
+# int-01/Auth/set_az.sh is kept but must only contain placeholder values
