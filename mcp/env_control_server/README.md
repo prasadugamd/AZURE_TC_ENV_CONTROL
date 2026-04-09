@@ -14,7 +14,28 @@ This package exposes your existing environment control script as MCP tools.
 - Python 3.10+
 - mcp package
 - Access to shell runtime for EnvControl.sh (bash)
-- Azure CLI/auth prerequisites already used by EnvControl.sh
+- Azure CLI authenticated (see Auth Setup below)
+- kubectl (optional — only needed for local K8s deployment scaling)
+
+## Auth Setup (required on each new host)
+
+### 1. Azure CLI login
+Update `int-01/Auth/set_az.sh` with real values (do NOT commit them), then source it:
+```bash
+cd int-01/Auth && . set_az.sh
+```
+
+### 2. Kubeconfig for kubectl (optional)
+`.kube/` is excluded from the repo because it contains cluster tokens.
+Generate it on each host after Azure login:
+```bash
+az aks get-credentials \
+  --resource-group <AKS_RESOURCE_GROUP> \
+  --name <AKS_CLUSTER_NAME> \
+  --overwrite-existing
+```
+This creates `~/.kube/config` (or `int-01/Auth/.kube/config` if KUBECONFIG is set).
+If kubectl is not available locally, EnvControl.sh falls back to SSH on the K8s management node automatically.
 
 ## Local Run
 From workspace root:

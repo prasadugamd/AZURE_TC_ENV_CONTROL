@@ -30,3 +30,27 @@ Example:
 - Avoid hardcoding secrets in scripts or chat messages.
 - Validate changes with small, safe checks before full start/stop runs.
 - Commit both agent and docs to enable onboarding for other users.
+
+## Host Prerequisites (per machine, not committed to repo)
+
+### Azure CLI auth
+```bash
+# Fill in real values in int-01/Auth/set_az.sh then:
+cd int-01/Auth && . set_az.sh
+```
+
+### kubeconfig (optional — only needed for local kubectl)
+`.kube/` is excluded from the repo (contains cluster tokens — security risk).
+Run once per host after Azure login:
+```bash
+az aks get-credentials \
+  --resource-group <AKS_RESOURCE_GROUP> \
+  --name <AKS_CLUSTER_NAME> \
+  --overwrite-existing
+```
+Without this, EnvControl.sh automatically falls back to SSH-based kubectl on the K8s management node.
+
+### MCP server Python dependency
+```bash
+pip install -r mcp/env_control_server/requirements.txt
+```
