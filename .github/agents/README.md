@@ -33,6 +33,14 @@ Example:
 
 ## Host Prerequisites (per machine, not committed to repo)
 
+### Linux Python environment
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r mcp/env_control_server/requirements.txt
+```
+
 ### Azure CLI auth
 ```bash
 # Fill in real values in int-01/Auth/set_az.sh then:
@@ -52,5 +60,6 @@ Without this, EnvControl.sh automatically falls back to SSH-based kubectl on the
 
 ### MCP server Python dependency
 ```bash
-pip install -r mcp/env_control_server/requirements.txt
+source .venv/bin/activate
+python3 -m pip install -r mcp/env_control_server/requirements.txt
 ```

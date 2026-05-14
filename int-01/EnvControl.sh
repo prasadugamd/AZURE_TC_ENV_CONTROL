@@ -35,11 +35,14 @@ set -u
 #-------------------------------#
 export Env_Code=${1:-""}
 export ACTION=${2:-status}
-export CURRENT_DIR="/home/jenadm/scripts/AZURE_ENV_CONTROL/${Env_Code}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export CURRENT_DIR="$SCRIPT_DIR"
 export CONFIG_DIR="${CURRENT_DIR}/config"
 export AUTH_PATH="${CURRENT_DIR}/Auth"
 LOG_FILE="${CURRENT_DIR}/EnvControl.log"
 REPORT_FILE="${CURRENT_DIR}/EnvControl_Report.html"
+INTERNAL_DNS_SUFFIX="${ENVCONTROL_DNS_SUFFIX:-internal.example.local}"
+CM_SERVER_FQDN="${Env_Code}-cdhmng01.${INTERNAL_DNS_SUFFIX}"
 
 mkdir -p "$CONFIG_DIR"
 
@@ -197,7 +200,7 @@ GetVMList() {
             # Format: instance_name<tab>resource_group<tab>computer_fqdn<tab>private_ip
             local computer_fqdn
             if [[ -n "$computer_name" ]]; then
-              computer_fqdn="${computer_name}.int.corp.amdocs.azr"
+              computer_fqdn="${computer_name}.${INTERNAL_DNS_SUFFIX}"
               if [[ -n "$private_ip" ]]; then
                 info "  Instance $instance_id: $instance_name -> Computer: $computer_name -> IP: $private_ip"
               else
@@ -205,7 +208,7 @@ GetVMList() {
               fi
             else
               # Fallback if computer_name is empty (shouldn't happen but be defensive)
-              computer_fqdn="${instance_name}.int.corp.amdocs.azr"
+              computer_fqdn="${instance_name}.${INTERNAL_DNS_SUFFIX}"
               warn "  Instance $instance_id: $instance_name has no computer name, using instance name as fallback"
             fi
             
@@ -270,19 +273,19 @@ GetClouderaHosts() {
     info "No Cloudera VMSS found, creating default config with FQDN"
     # Create default config with common Cloudera FQDNs
     cat > "$cdh_config" <<-EOF
-${Env_Code}-cdhdat01.int.corp.amdocs.azr
-${Env_Code}-cdhdat02.int.corp.amdocs.azr
-${Env_Code}-cdhdat03.int.corp.amdocs.azr
-${Env_Code}-cdhmng01.int.corp.amdocs.azr
-${Env_Code}-cdhmng02.int.corp.amdocs.azr
-${Env_Code}-cdhmng03.int.corp.amdocs.azr
+  ${Env_Code}-cdhdat01.${INTERNAL_DNS_SUFFIX}
+  ${Env_Code}-cdhdat02.${INTERNAL_DNS_SUFFIX}
+  ${Env_Code}-cdhdat03.${INTERNAL_DNS_SUFFIX}
+  ${Env_Code}-cdhmng01.${INTERNAL_DNS_SUFFIX}
+  ${Env_Code}-cdhmng02.${INTERNAL_DNS_SUFFIX}
+  ${Env_Code}-cdhmng03.${INTERNAL_DNS_SUFFIX}
 EOF
   else
     # Extract base names and convert to FQDNs
     echo "$vmss_list" | while read -r vmss rg; do
-      # Convert VMSS name to FQDN (e.g., int-01-cdhmng01-vmss -> int-01-cdhmng01.int.corp.amdocs.azr)
+      # Convert VMSS name to FQDN using the configured DNS suffix.
       local base_name=$(echo "$vmss" | sed 's/-vmss$//')
-      echo "${base_name}.int.corp.amdocs.azr"
+      echo "${base_name}.${INTERNAL_DNS_SUFFIX}"
     done > "$cdh_config"
   fi
 
@@ -557,8 +560,7 @@ ManageClouderaVMSS() {
   if [[ -f "$cdh_config" ]]; then
     while read -r cdh_host; do
       [[ -z "$cdh_host" ]] && continue
-      # Extract base name from FQDN (e.g., int-01-cdhmng01 from int-01-cdhmng01.int.corp.amdocs.azr)
-      local base_name=$(echo "$cdh_host" | sed 's/\.int\.corp\.amdocs\.azr$//' | sed 's/\..*$//')
+      local base_name=${cdh_host%%.*}
       cloudera_base_names+=("$base_name")
     done < "$cdh_config"
     info "Loaded ${#cloudera_base_names[@]} Cloudera host reference(s) from CDH config"
@@ -1031,7 +1033,7 @@ if [[ ${ACTION} = "start" ]] || [[ ${ACTION} = "status" ]]; then
   fi
   
   info "Checking Cloudera Manager server accessibility..."
-  info "Target: http://${Env_Code}-cdhmng01.int.corp.amdocs.azr:7180"
+  info "Target: http://${CM_SERVER_FQDN}:7180"
   
   # Try to connect directly with timeout - faster than running external script
   local cm_ready=false
@@ -1063,7 +1065,7 @@ if [[ ${ACTION} = "start" ]] || [[ ${ACTION} = "status" ]]; then
   if [[ "$cm_ready" == true ]]; then
     success "Cloudera Manager server is accessible"
     record_summary success "Cloudera Manager server is accessible"
-    info "Web UI: http://${Env_Code}-cdhmng01.int.corp.amdocs.azr:7180"
+    info "Web UI: http://${CM_SERVER_FQDN}:7180"
   else
     if [[ ${ACTION} = "start" ]]; then
       warn "Cloudera Manager server not yet accessible after $((retry_count * 30)) seconds of retries"
@@ -1077,11 +1079,11 @@ if [[ ${ACTION} = "start" ]] || [[ ${ACTION} = "status" ]]; then
       warn "  3. Check logs: ssh taapp1@${REMOTE_HOST} \"sudo tail -50 /var/log/cloudera-scm-server/cloudera-scm-server.log\""
       warn "  4. Look for: 'Started Jetty server' or 'WebServerImpl' messages in logs"
       warn ""
-      warn "Web UI: http://${Env_Code}-cdhmng01.int.corp.amdocs.azr:7180"
+      warn "Web UI: http://${CM_SERVER_FQDN}:7180"
       record_summary warn "Cloudera Manager still initializing - wait 5-10 more minutes and check status"
     else
       error "Cloudera Manager server is not accessible"
-      error "Web UI: http://${Env_Code}-cdhmng01.int.corp.amdocs.azr:7180"
+      error "Web UI: http://${CM_SERVER_FQDN}:7180"
       error ""
       error "Troubleshooting:"
       error "  1. Check if CM server process is running:"
@@ -1492,7 +1494,7 @@ ManageConsul() {
       warn "  If instances are running in Azure but still not reachable:"
       warn "    - Verify NSG rules allow SSH (port 22) from your location"
       warn "    - Check if bastion/jump host can reach the VNET"
-      warn "    - Verify DNS suffix 'int.corp.amdocs.azr' is correct"
+      warn "    - Verify DNS suffix '${INTERNAL_DNS_SUFFIX}' is correct"
       warn "    - Check Azure Bastion connectivity if using it"
       warn "═══════════════════════════════════════════════════════════════════"
       

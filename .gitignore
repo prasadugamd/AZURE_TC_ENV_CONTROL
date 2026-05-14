@@ -30,6 +30,7 @@ int-01/Auth/.kube/
 # Generated / runtime files — not source
 int-01/EnvControl.log
 int-01/EnvControl_Report.html
+int-01/config/*.config
 int-01/Azure_TC_INT_EnvControl_Runbook_SOP.docx
 int-01/INT-01_EnvControl_Runbook.docx
 
