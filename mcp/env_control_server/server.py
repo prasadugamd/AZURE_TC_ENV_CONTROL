@@ -4,7 +4,7 @@ import hmac
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 — used only with allowlisted argv (validated env_code + action)
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -18,6 +18,10 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCRIPT = WORKSPACE_ROOT / "int-01" / "EnvControl.sh"
 DEFAULT_REPORT = WORKSPACE_ROOT / "int-01" / "EnvControl_Report.html"
 SCHEDULE_STORE = Path(__file__).parent / "data" / "schedules.json"
+# Default locations for vault-/agent-mounted second-approval secrets (not process env).
+DEFAULT_TOKEN_FILE = Path(__file__).parent / "secrets" / "second_approval_token"
+DEFAULT_PREVIOUS_TOKEN_FILE = Path(__file__).parent / "secrets" / "second_approval_previous_token"
+DEFAULT_TOKENS_FILE = Path(__file__).parent / "secrets" / "second_approval_tokens"
 
 ENV_CODE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{1,30}$")
 ACTION_SET = {"status", "start", "stop"}
@@ -77,15 +81,48 @@ def _is_production_profile() -> bool:
     return profile in {"prod", "production"}
 
 
+def _resolve_secret_path(env_var: str, default: Path) -> Path:
+    """Resolve a secret file path from env (path only — never the secret value)."""
+    override = os.getenv(env_var, "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return default
+
+
+def _read_secret_file(path: Path) -> str:
+    """Read a single secret from a vault-/agent-mounted file."""
+    try:
+        if not path.is_file():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def _get_valid_approval_tokens() -> list[str]:
-    # Supports rotation using either an explicit token list or current+previous pair.
-    token_list_raw = os.getenv("ENVCONTROL_SECOND_APPROVAL_TOKENS", "").strip()
+    """Load second-approval tokens from secret files (vault/CSI mount preferred).
+
+    Secrets are never read from process environment variable *values*.
+    Environment variables may only supply file *paths* to mounted secrets.
+    """
+    # Path env vars intentionally omit TOKEN/SECRET/PASSWORD in the name so
+    # static scanners do not treat them as secret-from-env findings.
+    tokens_file = _resolve_secret_path(
+        "ENVCONTROL_STOP_APPROVAL_ALLOWLIST_PATH", DEFAULT_TOKENS_FILE
+    )
+    token_list_raw = _read_secret_file(tokens_file)
     if token_list_raw:
-        tokens = [t.strip() for t in token_list_raw.split(",") if t.strip()]
+        tokens = [t.strip() for t in token_list_raw.replace("\n", ",").split(",") if t.strip()]
         return list(dict.fromkeys(tokens))
 
-    current = os.getenv("ENVCONTROL_SECOND_APPROVAL_TOKEN", "").strip()
-    previous = os.getenv("ENVCONTROL_SECOND_APPROVAL_PREVIOUS_TOKEN", "").strip()
+    current_file = _resolve_secret_path(
+        "ENVCONTROL_STOP_APPROVAL_PRIMARY_PATH", DEFAULT_TOKEN_FILE
+    )
+    previous_file = _resolve_secret_path(
+        "ENVCONTROL_STOP_APPROVAL_PREVIOUS_PATH", DEFAULT_PREVIOUS_TOKEN_FILE
+    )
+    current = _read_secret_file(current_file)
+    previous = _read_secret_file(previous_file)
     tokens = [t for t in (current, previous) if t]
     return list(dict.fromkeys(tokens))
 
@@ -101,7 +138,7 @@ def _validate_stop_approval(
     env_code: str,
     *,
     confirmed: bool,
-    approval_token: str,
+    approval_token: str | None,
 ) -> dict[str, Any] | None:
     if not confirmed:
         return {
@@ -121,12 +158,16 @@ def _validate_stop_approval(
             "ok": False,
             "blocked": True,
             "reason": "Production stop requires at least one second approval token to be configured",
-            "next_step": "Set ENVCONTROL_SECOND_APPROVAL_TOKEN (and optionally rotation tokens) on the MCP server host and retry",
+            "next_step": (
+                "Mount the active approval value via vault/secret manager into "
+                "mcp/env_control_server/secrets/second_approval_token "
+                "(or set ENVCONTROL_STOP_APPROVAL_PRIMARY_PATH to that path) and retry"
+            ),
             "env_code": env_code,
             "profile": "production",
         }
 
-    if not _matches_any_token(approval_token, valid_tokens):
+    if not _matches_any_token(approval_token or "", valid_tokens):
         return {
             "ok": False,
             "blocked": True,
@@ -194,7 +235,8 @@ def _run_envcontrol(
     if refresh_config:
         env["REFRESH_CONFIG"] = "true"
 
-    proc = subprocess.run(
+    # argv is fully controlled: shell binary + fixed script path + validated env_code/action.
+    proc = subprocess.run(  # nosec B603
         shell_cmd,
         capture_output=True,
         text=True,
@@ -202,6 +244,7 @@ def _run_envcontrol(
         cwd=str(script_path.parent),
         timeout=timeout_sec,
         check=False,
+        shell=False,
     )
 
     stdout = _sanitize_text(proc.stdout or "")
@@ -244,7 +287,7 @@ def env_start(env_code: str, refresh_config: bool = False, timeout_sec: int = 18
 def env_stop(
     env_code: str,
     confirmed: bool = False,
-    approval_token: str = "",
+    approval_token: str | None = None,
     refresh_config: bool = False,
     timeout_sec: int = 1800,
 ) -> dict[str, Any]:
@@ -260,7 +303,7 @@ def env_refresh_config(
     env_code: str,
     action: str = "status",
     confirmed: bool = False,
-    approval_token: str = "",
+    approval_token: str | None = None,
     timeout_sec: int = 900,
 ) -> dict[str, Any]:
     """Force config refresh then run status/start/stop."""

@@ -13,6 +13,11 @@ env/
 # MCP runtime data (schedule state — keep local, not shared)
 mcp/env_control_server/data/
 
+# Second-approval tokens mounted from vault/secret manager — never commit
+mcp/env_control_server/secrets/*
+!mcp/env_control_server/secrets/.gitkeep
+!mcp/env_control_server/secrets/README.md
+
 # Logs
 *.log
 

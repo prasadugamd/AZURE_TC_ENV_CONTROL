@@ -87,11 +87,14 @@ Expected result:
   - example: env.example.internal
 - ENVCONTROL_PROFILE: runtime profile mode
   - values: nonprod (default), production
-- ENVCONTROL_SECOND_APPROVAL_TOKEN: active token required in production for stop actions
-  - recommendation: store in host secret manager or secure process environment
-- ENVCONTROL_SECOND_APPROVAL_PREVIOUS_TOKEN: optional previous token for rotation grace period
-- ENVCONTROL_SECOND_APPROVAL_TOKENS: optional comma-separated token allowlist
-  - when set, this list is used as the full rotation set and takes precedence
+- ENVCONTROL_STOP_APPROVAL_PRIMARY_PATH: path to the active second-approval token file
+  - default: mcp/env_control_server/secrets/second_approval_token
+  - mount this file from Vault/CyberArk/Azure Key Vault CSI (do not put the token in env vars)
+- ENVCONTROL_STOP_APPROVAL_PREVIOUS_PATH: path to previous token file (rotation grace)
+  - default: mcp/env_control_server/secrets/second_approval_previous_token
+- ENVCONTROL_STOP_APPROVAL_ALLOWLIST_PATH: path to comma- or newline-separated allowlist file
+  - default: mcp/env_control_server/secrets/second_approval_tokens
+  - when present and non-empty, this list is the full rotation set and takes precedence
 
 ## VS Code MCP Registration (workspace)
 Create or update .vscode/mcp.json:
@@ -139,10 +142,19 @@ After saving mcp.json, reload VS Code window so tools are discovered.
 ```
 
 ## Token Rotation Flow
-1. Set ENVCONTROL_SECOND_APPROVAL_TOKEN to the new token.
-2. Keep the old token temporarily in ENVCONTROL_SECOND_APPROVAL_PREVIOUS_TOKEN.
-3. After clients switch to the new token, remove ENVCONTROL_SECOND_APPROVAL_PREVIOUS_TOKEN.
+1. Write the new token into `mcp/env_control_server/secrets/second_approval_token`
+   (or the path in `ENVCONTROL_STOP_APPROVAL_PRIMARY_PATH`) via your secret manager mount.
+2. Keep the old token temporarily in `secrets/second_approval_previous_token`.
+3. After clients switch to the new token, remove the previous-token file.
 
 Alternative:
-1. Set ENVCONTROL_SECOND_APPROVAL_TOKENS to a comma-separated allowlist during transition.
+1. Write a comma- or newline-separated allowlist to `secrets/second_approval_tokens`.
 2. Remove old token entries after cutover.
+
+Example (local non-prod only — prefer vault mounts in production):
+```bash
+mkdir -p mcp/env_control_server/secrets
+umask 077
+printf '%s' 'active-token-value' > mcp/env_control_server/secrets/second_approval_token
+chmod 600 mcp/env_control_server/secrets/second_approval_token
+```
