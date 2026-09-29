@@ -96,8 +96,8 @@ Expected result:
   - default: mcp/env_control_server/secrets/second_approval_tokens
   - when present and non-empty, this list is the full rotation set and takes precedence
 
-## VS Code MCP Registration (workspace)
-Create or update .vscode/mcp.json:
+## MCP JSON (required for InnOVerse / IDE registration)
+This package ships a root-level [`mcp.json`](../../mcp.json) (mirrored at `.vscode/mcp.json`):
 
 ```json
 {
@@ -114,7 +114,10 @@ Create or update .vscode/mcp.json:
 }
 ```
 
-After saving mcp.json, reload VS Code window so tools are discovered.
+After saving or updating `mcp.json`, reload the VS Code / Cursor window so tools are discovered.
+
+## Supported Python version
+- Python **3.10+** (required by the `mcp` SDK)
 
 ## Linux Notes
 - Keep using forward-slash paths exactly as shown in this README.

@@ -28,17 +28,35 @@ python3 mcp/env_control_server/server.py
 bash mcp/env_control_server/smoke_test.sh
 ```
 
-### 5. MCP in VS Code
-- Open this repo in VS Code.
-- Ensure .vscode/mcp.json is present (already configured for Linux: uses `python3`).
-- Reload VS Code window to register MCP tools.
+### 5. MCP in VS Code / Cursor
+- Open this repo in VS Code or Cursor.
+- MCP JSON is shipped at the repo root as [`mcp.json`](mcp.json) (also mirrored at `.vscode/mcp.json`).
+- Reload the window so MCP tools are discovered.
 
 ## Requirements
-- Python 3.10+
+- Python 3.10 or newer (tested with Python 3.10+)
 - bash
 - Azure CLI (`az`)
 - ssh
 - kubectl (optional)
+
+## MCP JSON
+Root [`mcp.json`](mcp.json) wires the stdio MCP server:
+
+```json
+{
+  "servers": {
+    "env-control-mcp": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["mcp/env_control_server/server.py"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+Dependencies: [`mcp/env_control_server/requirements.txt`](mcp/env_control_server/requirements.txt)
 
 ## Security
 - Never commit real credentials or tokens.
